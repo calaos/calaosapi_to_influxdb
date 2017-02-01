@@ -1,0 +1,14 @@
+{
+    "IndluxDB": {
+        "Host": "127.0.0.1",
+        "Port": 8089,
+        "Database": "sensors"
+    },
+    "WebSocketServer": {
+        "Host": "127.0.0.1",
+        "Port": 5454,
+        "User": "user",
+        "Password": "pass"
+    },
+    "Id" : "UUID"
+}
