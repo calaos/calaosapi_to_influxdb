@@ -1,8 +1,8 @@
 {
     "IndluxDB": {
         "Host": "127.0.0.1",
-        "Port": 8089,
-        "Database": "sensors"
+        "Port": 8086,
+        "Database": "calaos"
     },
     "WebSocketServer": {
         "Host": "127.0.0.1",
@@ -10,5 +10,5 @@
         "User": "user",
         "Password": "pass"
     },
-    "Id" : "UUID"
+    "Id" : "MyHome"
 }

@@ -18,8 +18,6 @@ type InfluxDBConfig struct {
 	Host     string
 	Port     int
 	Database string
-	User     string
-	Password string
 }
 
 type WebSocketConfig struct {
@@ -200,7 +198,7 @@ func main() {
 
 		// Create a new HTTPClient
 		c, err := client.NewHTTPClient(client.HTTPConfig{
-			Addr: "http://localhost:8086",
+			Addr: fmt.Sprintf("http://%s:%d", config.InfluxDB.Host, config.InfluxDB.Port),
 		})
 		if err != nil {
 			log.Fatal(err)
@@ -208,7 +206,7 @@ func main() {
 
 		// Create a new point batch
 		bp, err := client.NewBatchPoints(client.BatchPointsConfig{
-			Database:  "calaos",
+			Database:  config.InfluxDB.Database,
 			Precision: "s",
 		})
 		if err != nil {
