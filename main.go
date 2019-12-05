@@ -118,7 +118,6 @@ func getNameFromId(id string) (ioName, roomName string) {
 	for i := range home.Data.Rooms {
 		for j := range home.Data.Rooms[i].Items {
 			if home.Data.Rooms[i].Items[j].ID == id {
-				log.Println("ID " + id + " == Name " + home.Data.Rooms[i].Items[j].Name)
 				return home.Data.Rooms[i].Items[j].Name, home.Data.Rooms[i].Name
 			}
 		}
@@ -255,12 +254,13 @@ func main() {
 					}
 					name, room := getNameFromId(eventMsg.Data.Data.ID)
 
+					log.Println("IO:", name, "("+room+")", "State:", eventMsg.Data.Data.State)
+
 					pointKey := fmt.Sprintf("%s - %s (%s)", eventMsg.Data.Data.ID, name, room)
 					fields := map[string]interface{}{
 						pointKey: formatStateData(eventMsg.Data.Data.ID, eventMsg.Data.Data.State),
 					}
 
-					log.Println("Config.Id ", config.Id)
 					pt, err := client.NewPoint(config.Id, nil, fields, time.Now())
 					if err != nil {
 						log.Fatal(err)
