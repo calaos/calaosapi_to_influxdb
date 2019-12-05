@@ -171,14 +171,10 @@ func main() {
 	if err != nil {
 		log.Println("error:", err)
 	}
-	log.Println("Configuration : ")
-	log.Println(config.WebSocketServer)
-	log.Println(config.InfluxDB)
-	log.Println(config.Id)
 
 	loggedin = false
 
-	log.Println("Opening :", "ws://"+config.WebSocketServer.Host+":"+strconv.Itoa(config.WebSocketServer.Port)+"/api")
+	log.Println("Calaos: Opening :", "ws://"+config.WebSocketServer.Host+":"+strconv.Itoa(config.WebSocketServer.Port)+"/api")
 
 	websocket_client, _, err := websocket.DefaultDialer.Dial("ws://"+config.WebSocketServer.Host+":"+strconv.Itoa(config.WebSocketServer.Port)+"/api", nil)
 	if err != nil {
@@ -188,6 +184,7 @@ func main() {
 
 	done := make(chan struct{})
 
+	log.Println("Calaos: Try login...")
 	msg := "{ \"msg\": \"login\", \"msg_id\": \"1\", \"data\": { \"cn_user\": \"" + config.WebSocketServer.User + "\", \"cn_pass\": \"" + config.WebSocketServer.Password + "\" } }"
 	if err = websocket_client.WriteMessage(websocket.TextMessage, []byte(msg)); err != nil {
 		log.Println("Write message error")
@@ -221,7 +218,6 @@ func main() {
 				log.Println("read:", err)
 				return
 			}
-			log.Printf("recv: %s", message)
 			var msg CalaosJsonMsg
 			err = json.Unmarshal([]byte(message), &msg)
 			if err != nil {
@@ -236,7 +232,7 @@ func main() {
 				}
 				if loginMsg.Data.Success == "true" {
 					loggedin = true
-					log.Printf("Loggedin")
+					log.Printf("Calaos: LoggedIn")
 					getHomeMsg := "{ \"msg\": \"get_home\", \"msg_id\": \"2\" }"
 					if err = websocket_client.WriteMessage(websocket.TextMessage, []byte(getHomeMsg)); err != nil {
 						log.Println("Write message error")
@@ -250,6 +246,7 @@ func main() {
 
 			if loggedin {
 				if msg.Msg == "event" {
+					log.Printf("Calaos: event received")
 
 					var eventMsg CalaosJsonMsgEvent
 					err = json.Unmarshal([]byte(message), &eventMsg)
@@ -276,6 +273,8 @@ func main() {
 					}
 				}
 				if msg.Msg == "get_home" {
+					log.Printf("Calaos: get_home received")
+
 					err = json.Unmarshal([]byte(message), &home)
 					if err != nil {
 						log.Println("error:", err)
