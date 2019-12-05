@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -10,7 +11,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/influxdata/influxdb/client/v2"
+	"github.com/influxdata/influxdb1-client/v2"
 )
 
 type InfluxDBConfig struct {
@@ -60,24 +61,26 @@ type CalaosJsonMsgEvent struct {
 	} `json:"data"`
 }
 
+type IOBase struct {
+	Visible string `json:"visible"`
+	VarType string `json:"var_type"`
+	ID      string `json:"id"`
+	IoType  string `json:"io_type"`
+	Name    string `json:"name"`
+	Type    string `json:"type"`
+	GuiType string `json:"gui_type"`
+	State   string `json:"state"`
+	Rw      string `json:"rw,omitempty"`
+}
+
 type CalaosJsonMsgHome struct {
 	Msg  string `json:"msg"`
 	Data struct {
-		Home []struct {
-			Type  string `json:"type"`
-			Hits  string `json:"hits"`
-			Name  string `json:"name"`
-			Items []struct {
-				Visible string `json:"visible"`
-				VarType string `json:"var_type"`
-				ID      string `json:"id"`
-				IoType  string `json:"io_type"`
-				Name    string `json:"name"`
-				Type    string `json:"type"`
-				GuiType string `json:"gui_type"`
-				State   string `json:"state"`
-				Rw      string `json:"rw,omitempty"`
-			} `json:"items"`
+		Rooms []struct {
+			Type  string   `json:"type"`
+			Hits  string   `json:"hits"`
+			Name  string   `json:"name"`
+			Items []IOBase `json:"items"`
 		} `json:"home"`
 		Cameras []interface{} `json:"cameras"`
 		Audio   []interface{} `json:"audio"`
@@ -85,23 +88,69 @@ type CalaosJsonMsgHome struct {
 	MsgID string `json:"msg_id"`
 }
 
-var loggedin bool
-var home CalaosJsonMsgHome
-var configFilename string
-var config Configuration
+var (
+	loggedin       bool
+	home           CalaosJsonMsgHome
+	configFilename string
+	config         Configuration
+	ioCache        = make(map[string]IOBase)
+)
 
-func getNameFromId(id string) string {
-	for i := range home.Data.Home {
-		for j := range home.Data.Home[i].Items {
-			if home.Data.Home[i].Items[j].ID == id {
-				log.Println("ID " + id + " == Name " + home.Data.Home[i].Items[j].Name)
-				return home.Data.Home[i].Items[j].Name
+type VarType int
+
+const (
+	VAR_STRING VarType = iota
+	VAR_BOOL
+	VAR_FLOAT
+)
+
+func (t VarType) String() string {
+	return [...]string{"string", "bool", "float"}[t]
+}
+
+func VarTypeFromStr(t string) VarType {
+	return map[string]VarType{
+		"string": VAR_STRING,
+		"bool":   VAR_BOOL,
+		"float":  VAR_FLOAT,
+	}[t]
+}
+
+func getNameFromId(id string) (ioName, roomName string) {
+	for i := range home.Data.Rooms {
+		for j := range home.Data.Rooms[i].Items {
+			if home.Data.Rooms[i].Items[j].ID == id {
+				log.Println("ID " + id + " == Name " + home.Data.Rooms[i].Items[j].Name)
+				return home.Data.Rooms[i].Items[j].Name, home.Data.Rooms[i].Name
 			}
 		}
-
 	}
-	return ""
+	return "", ""
+}
 
+func getVarType(id string) VarType {
+	return VarTypeFromStr(ioCache[id].VarType)
+}
+
+func formatStateData(id, state string) interface{} {
+	switch getVarType(id) {
+	case VAR_BOOL:
+		b, err := strconv.ParseBool(state)
+		if err != nil {
+			log.Printf("Failed to parse boolean state (%v) for id: %s. err = %v\n", state, id, err)
+			return ""
+		}
+		return b
+	case VAR_FLOAT:
+		f, err := strconv.ParseFloat(state, 64)
+		if err != nil {
+			log.Printf("Failed to parse float state (%v) for id: %s. err = %v\n", state, id, err)
+			return ""
+		}
+		return f
+	}
+
+	return state
 }
 
 func main() {
@@ -209,15 +258,11 @@ func main() {
 					if err != nil {
 						log.Println("error:", err)
 					}
-					name := getNameFromId(eventMsg.Data.Data.ID)
-					log.Printf("%s", name)
-					//data := "{\"" + name + "\":" + eventMsg.Data.Data.State + "}"
-					//fmt.Printf("%s\n", data)
+					name, room := getNameFromId(eventMsg.Data.Data.ID)
 
-					// Create a point and add to batch
-					//					tags := map[string]string{"cpu": "cpu-total"}
+					pointKey := fmt.Sprintf("%s - %s (%s)", eventMsg.Data.Data.ID, name, room)
 					fields := map[string]interface{}{
-						name: eventMsg.Data.Data.State,
+						pointKey: formatStateData(eventMsg.Data.Data.ID, eventMsg.Data.Data.State),
 					}
 
 					log.Println("Config.Id ", config.Id)
@@ -237,7 +282,30 @@ func main() {
 					if err != nil {
 						log.Println("error:", err)
 					}
-					_ = getNameFromId("id")
+
+					//fill cache
+					for i := range home.Data.Rooms {
+						for j := range home.Data.Rooms[i].Items {
+							ioCache[home.Data.Rooms[i].Items[j].ID] = home.Data.Rooms[i].Items[j]
+
+							//Add a point to initial batch
+							pointKey := fmt.Sprintf("%s - %s (%s)", home.Data.Rooms[i].Items[j].ID, home.Data.Rooms[i].Items[j].Name, home.Data.Rooms[i].Name)
+							fields := map[string]interface{}{
+								pointKey: formatStateData(home.Data.Rooms[i].Items[j].ID, home.Data.Rooms[i].Items[j].State),
+							}
+							pt, err := client.NewPoint(config.Id, nil, fields, time.Now())
+							if err != nil {
+								log.Fatal(err)
+							}
+
+							bp.AddPoint(pt)
+						}
+					}
+
+					// Write initial batch
+					if err := c.Write(bp); err != nil {
+						log.Fatal(err)
+					}
 				}
 			}
 		}
