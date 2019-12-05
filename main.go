@@ -187,7 +187,7 @@ func main() {
 	done := make(chan struct{})
 
 	log.Println("Calaos: Try login...")
-	msg := "{ \"msg\": \"login\", \"msg_id\": \"1\", \"data\": { \"cn_user\": \"" + config.WebSocketServer.User + "\", \"cn_pass\": \"" + config.WebSocketServer.Password + "\" } }"
+	msg := fmt.Sprintf(`{ "msg": "login", "data": { "cn_user": "%s", "cn_pass": "%s" } }`, config.WebSocketServer.User, config.WebSocketServer.Password)
 	if err = websocket_client.WriteMessage(websocket.TextMessage, []byte(msg)); err != nil {
 		log.Println("Write message error")
 		return
@@ -235,7 +235,7 @@ func main() {
 				if loginMsg.Data.Success == "true" {
 					loggedin = true
 					log.Printf("Calaos: LoggedIn")
-					getHomeMsg := "{ \"msg\": \"get_home\", \"msg_id\": \"2\" }"
+					getHomeMsg := `{ "msg": "get_home" }`
 					if err = websocket_client.WriteMessage(websocket.TextMessage, []byte(getHomeMsg)); err != nil {
 						log.Println("Write message error")
 						return
@@ -306,6 +306,16 @@ func main() {
 					if err := c.Write(bp); err != nil {
 						log.Fatal(err)
 					}
+
+					//In 10min send a get home again. This is needed to have value for IO that do not change that much over time. Without
+					//this there will be no data in graphs for a long time (could be 1 day or even more in some cases
+					time.AfterFunc(10*time.Minute, func() {
+						getHomeMsg := `{ "msg": "get_home" }`
+						if err = websocket_client.WriteMessage(websocket.TextMessage, []byte(getHomeMsg)); err != nil {
+							log.Println("Write message error")
+							return
+						}
+					})
 				}
 			}
 		}
