@@ -137,7 +137,10 @@ func formatStateData(id, state string) interface{} {
 			log.Printf("Failed to parse boolean state (%v) for id: %s. err = %v\n", state, id, err)
 			return ""
 		}
-		return b
+		if b {
+			return 1
+		}
+		return 0
 	case VAR_FLOAT:
 		f, err := strconv.ParseFloat(state, 64)
 		if err != nil {
